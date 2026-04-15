@@ -8,23 +8,32 @@ public class PlayerView : NetworkBehaviour
     [SerializeField] private PlayerNetwork _playerNetwork;
     [SerializeField] private TMP_Text _nicknameText;
     [SerializeField] private TMP_Text _hpText;
+    [SerializeField] private GameObject _uiRoot; // Весь объект с UI (над головой)
 
     public override void OnNetworkSpawn()
     {
-        // Подписываемся на изменения только после сетевого спавна объекта.
         _playerNetwork.Nickname.OnValueChanged += OnNicknameChanged;
         _playerNetwork.HP.OnValueChanged += OnHpChanged;
+        
+        // Подписываемся на состояние жизни
+        _playerNetwork.IsAlive.OnValueChanged += OnAliveChanged;
 
-        // Сразу рисуем текущее состояние, чтобы UI не ждал первого сетевого события.
         OnNicknameChanged(default, _playerNetwork.Nickname.Value);
         OnHpChanged(0, _playerNetwork.HP.Value);
+        OnAliveChanged(true, _playerNetwork.IsAlive.Value);
     }
 
     public override void OnNetworkDespawn()
     {
-        // Отписка обязательна, чтобы не оставлять "висячие" обработчики.
         _playerNetwork.Nickname.OnValueChanged -= OnNicknameChanged;
         _playerNetwork.HP.OnValueChanged -= OnHpChanged;
+        _playerNetwork.IsAlive.OnValueChanged -= OnAliveChanged;
+    }
+
+    private void OnAliveChanged(bool oldVal, bool newVal)
+    {
+        // Если игрок мертв — прячем весь UI полностью
+        if (_uiRoot != null) _uiRoot.SetActive(newVal);
     }
 
     private void OnNicknameChanged(FixedString32Bytes oldValue, FixedString32Bytes newValue)
@@ -37,3 +46,4 @@ public class PlayerView : NetworkBehaviour
         _hpText.text = $"HP: {newValue}";
     }
 }
+
