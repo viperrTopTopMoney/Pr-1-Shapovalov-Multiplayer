@@ -22,7 +22,6 @@ public class PlayerNetwork : NetworkBehaviour
     {
         _playerView = GetComponentInChildren<PlayerView>();
         
-        // Подписки на будущее (когда значения будут меняться в процессе игры)
         HP.OnChange += OnHpChanged;
         IsAlive.OnChange += OnIsAliveChanged;
         Nickname.OnChange += OnNicknameChanged;
@@ -32,11 +31,9 @@ public class PlayerNetwork : NetworkBehaviour
     {
         base.OnStartClient();
 
-        // СТРОГО: Принудительно обновляем UI текущими значениями из сети сразу при старте
-        // Это закроет проблему, когда OnChange не срабатывает для первого игрока
+        // Принудительно обновляем UI при появлении игрока
         RefreshUI();
 
-        // Если это наш локальный персонаж — отправляем свой ник серверу
         if (base.IsOwner)
         {
             StartCoroutine(DelayedNicknameSubmit());
@@ -45,15 +42,10 @@ public class PlayerNetwork : NetworkBehaviour
 
     private IEnumerator DelayedNicknameSubmit()
     {
-        // Ждем пару кадров, чтобы объект полностью "устаканился" в сети
         yield return new WaitForEndOfFrame();
         yield return new WaitForEndOfFrame();
-        
-        string myNick = ConnectionUI.PlayerNickname;
-        SubmitNicknameServerRpc(myNick);
+        SubmitNicknameServerRpc(ConnectionUI.PlayerNickname);
     }
-
-    // Удаляем Update() полностью — он нам больше не нужен
 
     public void TakeDamage(int amount)
     {
@@ -62,23 +54,19 @@ public class PlayerNetwork : NetworkBehaviour
     }
 
     public void Heal(int amount)
-        {
-            // Логика лечения работает только на сервере
-            if (!base.IsServerInitialized || !IsAlive.Value) return;
-            
-            // Ограничиваем хп максимумом в 100 единиц
-            HP.Value = Mathf.Min(100, HP.Value + amount);
-            
-            Debug.Log($"[Server] Игрок вылечен на {amount}. Текущее HP: {HP.Value}");
-        }
-        [ServerRpc]
-        private void SubmitNicknameServerRpc(string nickname)
-        {
-            string safeValue = string.IsNullOrWhiteSpace(nickname) ? $"Player_{base.OwnerId}" : nickname.Trim();
-            Nickname.Value = safeValue;
-        }
+    {
+        if (!base.IsServerInitialized || !IsAlive.Value) return;
+        HP.Value = Mathf.Min(100, HP.Value + amount);
+    }
 
-    // --- МЕТОДЫ ОБНОВЛЕНИЯ (БЕЗ ИЗМЕНЕНИЙ, они рабочие) ---
+    [ServerRpc]
+    private void SubmitNicknameServerRpc(string nickname)
+    {
+        string safeValue = string.IsNullOrWhiteSpace(nickname) ? $"Player_{base.OwnerId}" : nickname.Trim();
+        Nickname.Value = safeValue;
+    }
+
+    // --- ОБНОВЛЕНИЕ UI (Безопасные методы) ---
 
     private void UpdateHPLocal(int value)
     {
@@ -92,7 +80,6 @@ public class PlayerNetwork : NetworkBehaviour
 
     private void UpdateNicknameLocal(string name)
     {
-        if (string.IsNullOrEmpty(name)) return;
         if (_playerView != null) _playerView.UpdateNickname(name);
         else 
         {
@@ -107,9 +94,33 @@ public class PlayerNetwork : NetworkBehaviour
         else ToggleVisuals(isAlive);
     }
 
-    private void OnHpChanged(int prev, int next, bool asServer) => UpdateHPLocal(next);
-    private void OnIsAliveChanged(bool prev, bool next, bool asServer) => UpdateVisibilityLocal(next);
-    private void OnNicknameChanged(string prev, string next, bool asServer) => UpdateNicknameLocal(next);
+    // --- ХУКИ (События SyncVar) ---
+
+    private void OnHpChanged(int prev, int next, bool asServer)
+    {
+        // 1. Обновляем текст для всех (клиентов и сервера)
+        UpdateHPLocal(next);
+
+        // 2. СТРОГО НА СЕРВЕРЕ проверяем смерть
+        if (asServer)
+        {
+            if (next <= 0 && IsAlive.Value)
+            {
+                IsAlive.Value = false;
+                StartCoroutine(RespawnRoutine());
+            }
+        }
+    }
+
+    private void OnIsAliveChanged(bool prev, bool next, bool asServer)
+    {
+        UpdateVisibilityLocal(next);
+    }
+
+    private void OnNicknameChanged(string prev, string next, bool asServer)
+    {
+        UpdateNicknameLocal(next);
+    }
 
     public void RefreshUI()
     {
@@ -118,12 +129,28 @@ public class PlayerNetwork : NetworkBehaviour
         UpdateVisibilityLocal(IsAlive.Value);
     }
 
+    // --- РЕСПАУН ---
+
     private IEnumerator RespawnRoutine()
     {
         yield return new WaitForSeconds(_respawnTime);
-        // ... (твой код респавна без изменений)
+
+        Vector3 targetPosition = new Vector3(16.87f, 16.87f, -1.38f);
+        if (_spawnPoints != null && _spawnPoints.Length > 0)
+        {
+            int idx = Random.Range(0, _spawnPoints.Length);
+            if (_spawnPoints[idx] != null) targetPosition = _spawnPoints[idx].position;
+        }
+
+        if (TryGetComponent(out CharacterController cc)) cc.enabled = false;
+        transform.position = targetPosition;
+        yield return new WaitForFixedUpdate();
+        if (cc != null) cc.enabled = true;
+
+        // Сброс состояния
         HP.Value = 100;
         IsAlive.Value = true;
+        
         RefreshUI();
     }
 
