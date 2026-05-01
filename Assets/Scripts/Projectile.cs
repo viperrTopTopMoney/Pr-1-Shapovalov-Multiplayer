@@ -1,16 +1,17 @@
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 public class Projectile : NetworkBehaviour
 {
     [SerializeField] private float _speed = 25f;
     [SerializeField] private int _damage = 25;
-    private ulong _ownerId;
+    private int _ownerId; // В FishNet ID игрока - это int
 
-    public void Init(ulong ownerId)
+    public void Init(int ownerId)
     {
         _ownerId = ownerId;
-        if (IsServer) Invoke(nameof(Despawn), 3f);
+        // На сервере уничтожаем объект через 3 секунды
+        if (base.IsServerInitialized) Invoke(nameof(Despawn), 3f);
     }
 
     private void Update()
@@ -20,25 +21,24 @@ public class Projectile : NetworkBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (!IsServer) return;
+        if (!base.IsServerInitialized) return;
 
-        // ЛОГИКА ПО ТЕГУ "Player"
         if (other.CompareTag("Player"))
         {
             var target = other.GetComponentInParent<PlayerNetwork>();
             
-            if (target != null && target.OwnerClientId != _ownerId)
+            // Сравниваем ID владельца
+            if (target != null && target.OwnerId != _ownerId)
             {
                 target.TakeDamage(_damage);
-                Debug.Log($"<color=red>УРОН НАНЕСЕН!</color> Попали в игрока {target.OwnerClientId}");
                 Despawn();
             }
         }
-        else if (!other.isTrigger) // Попали в стену
+        else if (!other.isTrigger) 
         {
             Despawn();
         }
     }
 
-    private void Despawn() => NetworkObject.Despawn();
+    private void Despawn() => base.Despawn();
 }

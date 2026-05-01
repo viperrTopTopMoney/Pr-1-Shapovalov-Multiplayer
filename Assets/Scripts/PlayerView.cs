@@ -1,49 +1,53 @@
-using Unity.Collections;
 using TMPro;
-using Unity.Netcode;
 using UnityEngine;
+// УДАЛИЛИ FishNet.Object
 
-public class PlayerView : NetworkBehaviour
+public class PlayerView : MonoBehaviour // ТЕПЕРЬ MonoBehaviour
 {
-    [SerializeField] private PlayerNetwork _playerNetwork;
     [SerializeField] private TMP_Text _nicknameText;
     [SerializeField] private TMP_Text _hpText;
-    [SerializeField] private GameObject _uiRoot; // Весь объект с UI (над головой)
+    [SerializeField] private GameObject _uiRoot;
+    [SerializeField] private CanvasGroup _canvasGroup;
 
-    public override void OnNetworkSpawn()
+    private void Awake()
     {
-        _playerNetwork.Nickname.OnValueChanged += OnNicknameChanged;
-        _playerNetwork.HP.OnValueChanged += OnHpChanged;
-        
-        // Подписываемся на состояние жизни
-        _playerNetwork.IsAlive.OnValueChanged += OnAliveChanged;
+        if (_canvasGroup == null && _uiRoot != null)
+            _canvasGroup = _uiRoot.GetComponent<CanvasGroup>();
 
-        OnNicknameChanged(default, _playerNetwork.Nickname.Value);
-        OnHpChanged(0, _playerNetwork.HP.Value);
-        OnAliveChanged(true, _playerNetwork.IsAlive.Value);
+        if (_canvasGroup == null && _uiRoot != null)
+            _canvasGroup = _uiRoot.AddComponent<CanvasGroup>();
     }
 
-    public override void OnNetworkDespawn()
+    // УДАЛИЛИ OnStartNetwork полностью! 
+    // Теперь PlayerNetwork сам будет вызывать эти методы, когда данные будут готовы.
+
+    public void UpdateNickname(string name)
     {
-        _playerNetwork.Nickname.OnValueChanged -= OnNicknameChanged;
-        _playerNetwork.HP.OnValueChanged -= OnHpChanged;
-        _playerNetwork.IsAlive.OnValueChanged -= OnAliveChanged;
+        if (_nicknameText != null)
+        {
+            // Не даем записать пустую строку, если там уже что-то есть
+            if (string.IsNullOrEmpty(name)) return; 
+            _nicknameText.text = name;
+        }
     }
 
-    private void OnAliveChanged(bool oldVal, bool newVal)
+    public void UpdateHP(int hp)
     {
-        // Если игрок мертв — прячем весь UI полностью
-        if (_uiRoot != null) _uiRoot.SetActive(newVal);
+        if (_hpText != null)
+            _hpText.text = $"HP: {hp}";
     }
 
-    private void OnNicknameChanged(FixedString32Bytes oldValue, FixedString32Bytes newValue)
+    public void UpdateVisibility(bool isAlive)
     {
-        _nicknameText.text = newValue.ToString();
-    }
-
-    private void OnHpChanged(int oldValue, int newValue)
-    {
-        _hpText.text = $"HP: {newValue}";
+        if (_canvasGroup != null)
+        {
+            _canvasGroup.alpha = isAlive ? 1 : 0;
+            _canvasGroup.interactable = isAlive;
+            _canvasGroup.blocksRaycasts = isAlive;
+        }
+        else if (_uiRoot != null)
+        {
+            _uiRoot.SetActive(isAlive);
+        }
     }
 }
-

@@ -1,16 +1,16 @@
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 public class PlayerLocalSetup : NetworkBehaviour
 {
     [SerializeField] private Camera _playerCamera;
 
-    public override void OnNetworkSpawn()
+    public override void OnStartNetwork()
     {
-        // Включаем камеру только если этот объект — наш локальный персонаж (Owner)
+        // Включаем камеру только для владельца
         if (_playerCamera != null)
         {
-            _playerCamera.gameObject.SetActive(IsOwner);
+            _playerCamera.gameObject.SetActive(base.Owner.IsLocalClient);
         }
     }
 }

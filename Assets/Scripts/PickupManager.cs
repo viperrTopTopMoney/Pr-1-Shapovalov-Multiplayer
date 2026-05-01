@@ -1,4 +1,5 @@
-using Unity.Netcode;
+using FishNet;
+using FishNet.Object;
 using UnityEngine;
 using System.Collections;
 
@@ -10,26 +11,23 @@ public class PickupManager : MonoBehaviour
 
     private void Start()
     {
-        // Подписываемся на событие запуска сервера
-        if (NetworkManager.Singleton != null)
-        {
-            NetworkManager.Singleton.OnServerStarted += OnServerStarted;
-            
-            // Если сервер уже запущен (например, при переходе между сценами)
-            if (NetworkManager.Singleton.IsServer) OnServerStarted();
-        }
+        // Подписка на старт сервера в FishNet
+        InstanceFinder.ServerManager.OnServerConnectionState += OnServerState;
     }
 
     private void OnDestroy()
     {
-        // Обязательно отписываемся, чтобы не было утечек памяти
-        if (NetworkManager.Singleton != null)
-            NetworkManager.Singleton.OnServerStarted -= OnServerStarted;
+        if (InstanceFinder.ServerManager != null)
+            InstanceFinder.ServerManager.OnServerConnectionState -= OnServerState;
     }
 
-    private void OnServerStarted()
+    private void OnServerState(FishNet.Transporting.ServerConnectionStateArgs args)
     {
-        SpawnAll();
+        // Если сервер запустился (Started)
+        if (args.ConnectionState == FishNet.Transporting.LocalConnectionState.Started)
+        {
+            SpawnAll();
+        }
     }
 
     private void SpawnAll()
@@ -40,7 +38,6 @@ public class PickupManager : MonoBehaviour
 
     public void OnPickedUp(Vector3 position)
     {
-        if (!NetworkManager.Singleton.IsServer) return;
         StartCoroutine(RespawnAfterDelay(position));
     }
 
@@ -52,15 +49,10 @@ public class PickupManager : MonoBehaviour
 
     private void SpawnPickup(Vector3 position)
     {
-        var go = Instantiate(_healthPickupPrefab, position, Quaternion.identity);
+        GameObject go = Instantiate(_healthPickupPrefab, position, Quaternion.identity);
+        if (go.TryGetComponent(out HealthPickup pickup)) pickup.Init(this);
         
-        // Передаем ссылку на менеджер, чтобы аптечка знала, кому сообщить о "смерти"
-        if (go.TryGetComponent(out HealthPickup pickup))
-        {
-            pickup.Init(this);
-        }
-
-        // Регистрируем объект в сети
-        go.GetComponent<NetworkObject>().Spawn();
+        // Глобальный спавн через InstanceFinder, если скрипт не NetworkBehaviour
+        InstanceFinder.ServerManager.Spawn(go);
     }
 }

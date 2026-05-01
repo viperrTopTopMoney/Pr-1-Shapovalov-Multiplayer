@@ -1,4 +1,4 @@
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 public class PlayerCombat : NetworkBehaviour
@@ -6,34 +6,32 @@ public class PlayerCombat : NetworkBehaviour
     [SerializeField] private PlayerNetwork _playerNetwork;
     [SerializeField] private int _damage = 10;
 
-    // Этот метод вызывается Unity автоматически, когда один коллайдер входит в другой
     private void OnControllerColliderHit(ControllerColliderHit hit)
     {
-        if (!IsOwner) return;
+        // base.IsOwner вместо IsOwner
+        if (!base.IsOwner) return;
+
         if (hit.gameObject.CompareTag("Player"))
         {
             PlayerNetwork target = hit.gameObject.GetComponent<PlayerNetwork>();
+            
+            // Проверяем, что цель — это не мы сами и она существует
             if (target != null && target != _playerNetwork)
             {
-                DealDamageServerRpc(target.NetworkObjectId, _damage);
+                // В FishNet можно передавать ссылки на NetworkBehaviour напрямую в RPC!
+                DealDamageServerRpc(target, _damage);
             }
         }
     }
 
     [ServerRpc]
-    private void DealDamageServerRpc(ulong targetObjectId, int damage)
+    private void DealDamageServerRpc(PlayerNetwork targetPlayer, int damage)
     {
-        // Сервер находит объект по ID
-        if (!NetworkManager.SpawnManager.SpawnedObjects.TryGetValue(targetObjectId, out NetworkObject targetObject))
-            return;
-
-        PlayerNetwork targetPlayer = targetObject.GetComponent<PlayerNetwork>();
-        
+        // Если объект нашелся и он "живой" в сети
         if (targetPlayer != null)
         {
-            // Вычитаем HP и ограничиваем снизу нулем (Mathf.Max)
-            int nextHp = Mathf.Max(0, targetPlayer.HP.Value - damage);
-            targetPlayer.HP.Value = nextHp;
+            // Используем метод TakeDamage, который мы уже переписали в PlayerNetwork
+            targetPlayer.TakeDamage(damage);
         }
     }
 }

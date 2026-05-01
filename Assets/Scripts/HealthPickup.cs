@@ -1,4 +1,4 @@
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 public class HealthPickup : NetworkBehaviour
@@ -7,7 +7,6 @@ public class HealthPickup : NetworkBehaviour
     private PickupManager _manager;
     private Vector3 _spawnPosition;
 
-    // Тот самый метод, который искал PickupManager
     public void Init(PickupManager manager)
     {
         _manager = manager;
@@ -16,27 +15,18 @@ public class HealthPickup : NetworkBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        // Только сервер обрабатывает подбор аптечки
-        if (!IsServer) return;
+        if (!base.IsServerInitialized) return;
 
         var player = other.GetComponent<PlayerNetwork>();
         if (player == null) return;
 
-        // Проверки из практики: мертвый не подбирает, при полном HP не лечим
-        if (!player.IsAlive.Value) return;
-        if (player.HP.Value >= 100) return;
+        // ИСПРАВЛЕНИЕ: Используем .Value для проверки здоровья и статуса жизни
+        if (!player.IsAlive.Value || player.HP.Value >= 100) return;
 
-        // Лечим игрока (не больше 100)
-        player.HP.Value = Mathf.Min(100, player.HP.Value + _healAmount);
+        player.Heal(_healAmount);
 
-        // Сообщаем менеджеру, что аптечка подобрана, чтобы он запустил таймер респавна
-        if (_manager != null)
-        {
-            _manager.OnPickedUp(_spawnPosition);
-        }
+        if (_manager != null) _manager.OnPickedUp(_spawnPosition);
 
-        // Удаляем аптечку из сети
-        GetComponent<NetworkObject>().Despawn(true);
+        base.Despawn();
     }
-    
 }

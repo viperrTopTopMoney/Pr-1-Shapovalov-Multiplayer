@@ -1,4 +1,4 @@
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 [RequireComponent(typeof(CharacterController))]
@@ -18,7 +18,9 @@ public class PlayerMovement : NetworkBehaviour
 
     private void Update()
     {
-        if (!IsOwner || !_playerNetwork.IsAlive.Value) return;
+        // Только владелец двигает своего персонажа
+        // ИСПРАВЛЕНИЕ: Добавляем .Value к IsAlive
+        if (!base.IsOwner || !_playerNetwork.IsAlive.Value) return;
 
         float h = Input.GetAxis("Horizontal");
         float v = Input.GetAxis("Vertical");
@@ -26,7 +28,6 @@ public class PlayerMovement : NetworkBehaviour
         Vector3 move = transform.right * h + transform.forward * v;
         move = move.normalized * _speed;
 
-        // Гравитация
         if (_cc.isGrounded && _verticalVelocity < 0) _verticalVelocity = -2f;
         _verticalVelocity += _gravity * Time.deltaTime;
         move.y = _verticalVelocity;
