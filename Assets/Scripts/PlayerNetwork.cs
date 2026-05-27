@@ -13,6 +13,7 @@ public class PlayerNetwork : NetworkBehaviour
     public readonly SyncVar<string> Nickname = new SyncVar<string>("");
 
     private PlayerView _playerView;
+    private Coroutine _respawnCoroutine; // Ссылка для отслеживания корутины респауна
 
     [Header("Settings")]
     [SerializeField] public Transform[] _spawnPoints;
@@ -30,8 +31,6 @@ public class PlayerNetwork : NetworkBehaviour
     public override void OnStartClient()
     {
         base.OnStartClient();
-
-        // Принудительно обновляем UI при появлении игрока
         RefreshUI();
 
         if (base.IsOwner)
@@ -66,7 +65,45 @@ public class PlayerNetwork : NetworkBehaviour
         Nickname.Value = safeValue;
     }
 
-    // --- ОБНОВЛЕНИЕ UI (Безопасные методы) ---
+    // --- МЕТОД ПОЛНОГО СБРОСА ДЛЯ НОВОГО РАУНДА ---
+    public void ResetRoundState()
+    {
+        if (!base.IsServerInitialized) return;
+
+        // Если игрок в этот момент лежал мертвым и ждал респауна — отменяем старый таймер респауна
+        if (_respawnCoroutine != null)
+        {
+            StopCoroutine(_respawnCoroutine);
+            _respawnCoroutine = null;
+        }
+
+        // Восстанавливаем сетевые переменные здоровья
+        HP.Value = 100;
+        IsAlive.Value = true;
+
+        // Телепортируем на точку спауна
+        if (TryGetComponent(out CharacterController cc)) cc.enabled = false;
+        
+        Vector3 targetPosition = new Vector3(16.87f, 16.87f, -1.38f);
+        if (_spawnPoints != null && _spawnPoints.Length > 0)
+        {
+            int idx = Random.Range(0, _spawnPoints.Length);
+            if (_spawnPoints[idx] != null) targetPosition = _spawnPoints[idx].position;
+        }
+        transform.position = targetPosition;
+        
+        if (cc != null) cc.enabled = true;
+
+        // Обновляем интерфейс
+        RefreshUI();
+
+        // --- ТУТ ТВОЙ СБРОС ПАТРОНОВ ---
+        // Так как патроны хранятся в твоем скрипте оружия/стрельбы, обратись к нему здесь. Примеры:
+        // 1. Если скрипт оружия висит тут же: 
+        //    if(TryGetComponent(out YourWeaponScript weapon)) { weapon.RestoreAmmo(); }
+        // 2. Если патроны прямо в этом скрипте (просто раскомментируй и впиши свои переменные):
+        //    YourAmmoSyncVar.Value = MaxAmmoConst;
+    }
 
     private void UpdateHPLocal(int value)
     {
@@ -94,20 +131,17 @@ public class PlayerNetwork : NetworkBehaviour
         else ToggleVisuals(isAlive);
     }
 
-    // --- ХУКИ (События SyncVar) ---
-
     private void OnHpChanged(int prev, int next, bool asServer)
     {
-        // 1. Обновляем текст для всех (клиентов и сервера)
         UpdateHPLocal(next);
 
-        // 2. СТРОГО НА СЕРВЕРЕ проверяем смерть
         if (asServer)
         {
             if (next <= 0 && IsAlive.Value)
             {
                 IsAlive.Value = false;
-                StartCoroutine(RespawnRoutine());
+                // Запоминаем запущенную корутину респауна
+                _respawnCoroutine = StartCoroutine(RespawnRoutine());
             }
         }
     }
@@ -129,8 +163,6 @@ public class PlayerNetwork : NetworkBehaviour
         UpdateVisibilityLocal(IsAlive.Value);
     }
 
-    // --- РЕСПАУН ---
-
     private IEnumerator RespawnRoutine()
     {
         yield return new WaitForSeconds(_respawnTime);
@@ -144,14 +176,14 @@ public class PlayerNetwork : NetworkBehaviour
 
         if (TryGetComponent(out CharacterController cc)) cc.enabled = false;
         transform.position = targetPosition;
-        yield return new WaitForFixedUpdate();
+        yield return new WaitForEndOfFrame();
         if (cc != null) cc.enabled = true;
 
-        // Сброс состояния
         HP.Value = 100;
         IsAlive.Value = true;
         
         RefreshUI();
+        _respawnCoroutine = null; // Очищаем ссылку по завершению
     }
 
     private void ToggleVisuals(bool isVisible)
