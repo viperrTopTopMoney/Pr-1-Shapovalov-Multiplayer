@@ -4,41 +4,63 @@ using UnityEngine;
 public class Projectile : NetworkBehaviour
 {
     [SerializeField] private float _speed = 25f;
-    [SerializeField] private int _damage = 25;
-    private int _ownerId; // В FishNet ID игрока - это int
+    [SerializeField] private int _damage = 1;
+    [SerializeField] private float _lifeTime = 3f;
+
+    private int _ownerId = -1;
 
     public void Init(int ownerId)
     {
         _ownerId = ownerId;
-        // На сервере уничтожаем объект через 3 секунды
-        if (base.IsServerInitialized) Invoke(nameof(Despawn), 3f);
+    }
+
+    public override void OnStartServer()
+    {
+        base.OnStartServer();
+        Invoke(nameof(DespawnProjectile), _lifeTime);
     }
 
     private void Update()
     {
-        transform.Translate(Vector3.forward * _speed * Time.deltaTime);
+        transform.Translate(Vector3.forward * (_speed * Time.deltaTime));
     }
 
     private void OnTriggerEnter(Collider other)
     {
-        if (!base.IsServerInitialized) return;
+        if (!base.IsServerInitialized || other == null)
+            return;
 
-        if (other.CompareTag("Player"))
+        // Friendly fire в коопе отключён: пуля не наносит урон игрокам.
+        if (other.GetComponentInParent<PlayerNetwork>() != null)
+            return;
+
+        ZombieNetwork zombie = other.GetComponentInParent<ZombieNetwork>();
+        if (zombie != null)
         {
-            var target = other.GetComponentInParent<PlayerNetwork>();
-            
-            // Сравниваем ID владельца
-            if (target != null && target.OwnerId != _ownerId)
-            {
-                target.TakeDamage(_damage);
-                Despawn();
-            }
+            zombie.TakeDamageServer(_damage, _ownerId);
+            DespawnProjectile();
+            return;
         }
-        else if (!other.isTrigger) 
+
+        // Баррикады не ломаются от выстрелов игроков.
+        if (other.GetComponentInParent<BarricadeController>() != null)
         {
-            Despawn();
+            DespawnProjectile();
+            return;
         }
+
+        if (!other.isTrigger)
+            DespawnProjectile();
     }
 
-    private void Despawn() => base.Despawn();
+    private void DespawnProjectile()
+    {
+        if (!base.IsServerInitialized)
+            return;
+
+        if (base.IsSpawned)
+            base.Despawn();
+        else
+            Destroy(gameObject);
+    }
 }

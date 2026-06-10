@@ -4,6 +4,7 @@ using UnityEngine;
 public class HealthPickup : NetworkBehaviour
 {
     [SerializeField] private int _healAmount = 40;
+
     private PickupManager _manager;
     private Vector3 _spawnPosition;
 
@@ -15,17 +16,20 @@ public class HealthPickup : NetworkBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (!base.IsServerInitialized) return;
+        if (!base.IsServerInitialized || other == null)
+            return;
 
-        var player = other.GetComponent<PlayerNetwork>();
-        if (player == null) return;
+        PlayerNetwork player = other.GetComponentInParent<PlayerNetwork>();
+        if (player == null)
+            return;
 
-        // ИСПРАВЛЕНИЕ: Используем .Value для проверки здоровья и статуса жизни
-        if (!player.IsAlive.Value || player.HP.Value >= 100) return;
+        if (!player.IsAlive.Value || player.HP.Value >= 100)
+            return;
 
         player.Heal(_healAmount);
 
-        if (_manager != null) _manager.OnPickedUp(_spawnPosition);
+        if (_manager != null)
+            _manager.OnPickedUp(_spawnPosition);
 
         base.Despawn();
     }

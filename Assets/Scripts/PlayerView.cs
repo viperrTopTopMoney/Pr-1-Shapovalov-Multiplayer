@@ -1,13 +1,15 @@
 using TMPro;
 using UnityEngine;
-// УДАЛИЛИ FishNet.Object
+using UnityEngine.UI;
 
-public class PlayerView : MonoBehaviour // ТЕПЕРЬ MonoBehaviour
+public class PlayerView : MonoBehaviour
 {
     [SerializeField] private TMP_Text _nicknameText;
     [SerializeField] private TMP_Text _hpText;
+    [SerializeField] private TMP_Text _stateText;
     [SerializeField] private GameObject _uiRoot;
     [SerializeField] private CanvasGroup _canvasGroup;
+    [SerializeField] private Animator _animator;
 
     private void Awake()
     {
@@ -18,17 +20,10 @@ public class PlayerView : MonoBehaviour // ТЕПЕРЬ MonoBehaviour
             _canvasGroup = _uiRoot.AddComponent<CanvasGroup>();
     }
 
-    // УДАЛИЛИ OnStartNetwork полностью! 
-    // Теперь PlayerNetwork сам будет вызывать эти методы, когда данные будут готовы.
-
     public void UpdateNickname(string name)
     {
-        if (_nicknameText != null)
-        {
-            // Не даем записать пустую строку, если там уже что-то есть
-            if (string.IsNullOrEmpty(name)) return; 
+        if (_nicknameText != null && !string.IsNullOrWhiteSpace(name))
             _nicknameText.text = name;
-        }
     }
 
     public void UpdateHP(int hp)
@@ -37,17 +32,53 @@ public class PlayerView : MonoBehaviour // ТЕПЕРЬ MonoBehaviour
             _hpText.text = $"HP: {hp}";
     }
 
-    public void UpdateVisibility(bool isAlive)
+    public void UpdateLifeState(PlayerLifeState state)
     {
+        if (_stateText != null)
+            _stateText.text = state.ToString().ToUpperInvariant();
+
         if (_canvasGroup != null)
         {
-            _canvasGroup.alpha = isAlive ? 1 : 0;
-            _canvasGroup.interactable = isAlive;
-            _canvasGroup.blocksRaycasts = isAlive;
+            _canvasGroup.alpha = state == PlayerLifeState.Dead ? 0.7f : 1f;
+            _canvasGroup.interactable = state == PlayerLifeState.Alive;
+            _canvasGroup.blocksRaycasts = state == PlayerLifeState.Alive;
         }
         else if (_uiRoot != null)
         {
-            _uiRoot.SetActive(isAlive);
+            _uiRoot.SetActive(state != PlayerLifeState.Dead);
         }
+
+        if (_animator != null)
+        {
+            _animator.SetBool(PlayerAnimationHooks.IsDowned, state == PlayerLifeState.Downed);
+            _animator.SetBool(PlayerAnimationHooks.IsDead, state == PlayerLifeState.Dead);
+
+            if (state == PlayerLifeState.Downed)
+                _animator.SetTrigger(PlayerAnimationHooks.Hit);
+            else if (state == PlayerLifeState.Dead)
+                _animator.SetTrigger(PlayerAnimationHooks.Death);
+        }
+    }
+
+    public void SetMoveState(float speed, bool running)
+    {
+        if (_animator == null)
+            return;
+
+        _animator.SetFloat(PlayerAnimationHooks.Speed, speed);
+        _animator.SetFloat(PlayerAnimationHooks.MoveSpeed, speed);
+        _animator.SetBool(PlayerAnimationHooks.IsRunning, running);
+    }
+
+    public void PlayHit()
+    {
+        if (_animator != null)
+            _animator.SetTrigger(PlayerAnimationHooks.Hit);
+    }
+
+    public void PlayRevive()
+    {
+        if (_animator != null)
+            _animator.SetTrigger(PlayerAnimationHooks.Revive);
     }
 }

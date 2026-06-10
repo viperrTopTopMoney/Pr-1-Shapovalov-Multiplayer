@@ -1,6 +1,6 @@
+using FishNet;
 using TMPro;
 using UnityEngine;
-using FishNet; // Добавлено пространство имен FishNet
 
 public class ConnectionUI : MonoBehaviour
 {
@@ -11,18 +11,34 @@ public class ConnectionUI : MonoBehaviour
     public void StartAsHost()
     {
         SaveNickname();
-        // В FishNet Хост = запуск сервера + запуск клиента
-        InstanceFinder.ServerManager.StartConnection();
-        InstanceFinder.ClientManager.StartConnection();
+        if (SessionManager.Instance != null)
+            SessionManager.Instance.StartHost();
+        else
+        {
+            InstanceFinder.ServerManager.StartConnection();
+            InstanceFinder.ClientManager.StartConnection();
+        }
         HideMenu();
     }
 
     public void StartAsClient()
     {
         SaveNickname();
-        // Запуск только клиента
-        InstanceFinder.ClientManager.StartConnection();
+        if (SessionManager.Instance != null)
+            SessionManager.Instance.StartClient();
+        else
+            InstanceFinder.ClientManager.StartConnection();
         HideMenu();
+    }
+
+    public void OpenSettings()
+    {
+        Debug.Log("Settings panel is not wired yet.");
+    }
+
+    public void ExitGame()
+    {
+        Application.Quit();
     }
 
     private void SaveNickname()
